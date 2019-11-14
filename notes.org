@@ -1,0 +1,108 @@
+* MetaCoq
+** Inductive definitions
+[[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/checker/src/environmentTyping.mli][metacoq defintion]]
+#+BEGIN_SRC ocaml
+  type one_inductive_body = { ind_name : ident; ind_type : T.term;
+                              ind_kelim : sort_family list;
+                              ind_ctors : ((ident * T.term) * nat) list;
+                              ind_projs : (ident * T.term) list }
+
+  val ind_name : one_inductive_body -> ident
+
+  val ind_type : one_inductive_body -> T.term
+
+  val ind_kelim : one_inductive_body -> sort_family list
+
+  val ind_ctors : one_inductive_body -> ((ident * T.term) * nat) list
+
+  val ind_projs : one_inductive_body -> (ident * T.term) list
+
+  type mutual_inductive_body = { ind_finite : recursivity_kind;
+                                 ind_npars : nat;
+                                 ind_params : context;
+                                 ind_bodies : one_inductive_body list;
+                                 ind_universes : universes_decl }
+#+END_SRC
+** TemplateMonad
+[[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/TemplateMonad/Core.v][metacoq definition]]
+#+BEGIN_SRC coq
+Cumulative Inductive TemplateMonad@{t u} : Type@{t} -> Prop :=
+(* Monadic operations *)
+| tmReturn : forall {A:Type@{t}}, A -> TemplateMonad A
+| tmBind : forall {A B : Type@{t}}, TemplateMonad A -> (A -> TemplateMonad B)
+                               -> TemplateMonad B
+
+(* General commands *)
+| tmPrint : forall {A:Type@{t}}, A -> TemplateMonad unit
+| tmMsg   : string -> TemplateMonad unit
+| tmFail : forall {A:Type@{t}}, string -> TemplateMonad A
+| tmEval : reductionStrategy -> forall {A:Type@{t}}, A -> TemplateMonad A
+
+(* Return the defined constant *)
+| tmLemma : ident -> forall A : Type@{t}, TemplateMonad A
+| tmDefinitionRed_ : forall (opaque : bool), ident -> option reductionStrategy -> forall {A:Type@{t}}, A -> TemplateMonad A
+| tmAxiomRed : ident -> option reductionStrategy -> forall A : Type@{t}, TemplateMonad A
+
+(* Guaranteed to not cause "... already declared" error *)
+| tmFreshName : ident -> TemplateMonad ident
+
+| tmAbout : qualid -> TemplateMonad (option global_reference)
+| tmCurrentModPath : unit -> TemplateMonad string
+
+(* Quoting and unquoting commands *)
+(* Similar to Quote Definition ... := ... *)
+| tmQuote : forall {A:Type@{t}}, A  -> TemplateMonad Ast.term
+(* Similar to Quote Recursively Definition ... := ...*)
+| tmQuoteRec : forall {A:Type@{t}}, A  -> TemplateMonad program
+(* Quote the body of a definition or inductive. Its name need not be fully qualified *)
+| tmQuoteInductive : qualid -> TemplateMonad mutual_inductive_body
+| tmQuoteUniverses : TemplateMonad constraints
+| tmQuoteConstant : qualid -> bool (* bypass opacity? *) -> TemplateMonad constant_entry
+(* unquote before making the definition *)
+(* FIXME take an optional universe context as well *)
+| tmMkInductive : mutual_inductive_entry -> TemplateMonad unit
+| tmUnquote : Ast.term  -> TemplateMonad typed_term@{u}
+| tmUnquoteTyped : forall A : Type@{t}, Ast.term -> TemplateMonad A
+
+(* Typeclass registration and querying for an instance *)
+| tmExistingInstance : qualid -> TemplateMonad unit
+| tmInferInstance : option reductionStrategy -> forall A : Type@{t}, TemplateMonad (option A)
+#+END_SRC
+** AST definition
+[[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/Ast.v][metacoq definition]]
+#+begin_src coq
+Inductive term : Set :=
+| tRel (n : nat)
+| tVar (id : ident) (* For free variables (e.g. in a goal) *)
+| tEvar (ev : nat) (args : list term)
+| tSort (s : universe)
+| tCast (t : term) (kind : cast_kind) (v : term)
+| tProd (na : name) (ty : term) (body : term)
+| tLambda (na : name) (ty : term) (body : term)
+| tLetIn (na : name) (def : term) (def_ty : term) (body : term)
+| tApp (f : term) (args : list term)
+| tConst (c : kername) (u : universe_instance)
+| tInd (ind : inductive) (u : universe_instance)
+| tConstruct (ind : inductive) (idx : nat) (u : universe_instance)
+| tCase (ind_and_nbparams: inductive*nat) (type_info:term)
+        (discr:term) (branches : list (nat * term))
+| tProj (proj : projection) (t : term)
+| tFix (mfix : mfixpoint term) (idx : nat)
+| tCoFix (mfix : mfixpoint term) (idx : nat).
+#+end_src
+
+And =inductive= in this case stands for
+#+begin_src coq
+type inductive = { inductive_mind : kername; inductive_ind : nat }
+#+end_src
+in [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/gen-src/basicAst.mli][basicAst.mli]]
+* Equations
+** Subterm relation
+[[file:~/my-dir/ed/uni/saar/prjcts/coq/Coq-Equations/src/subterm.ml][equations definition]]
+it uses =ederive= mechanism, as defined in [[file:~/my-dir/ed/uni/saar/prjcts/coq/Coq-Equations/src/subterm.ml][subterm.ml]]
+sigma in the definition comes from the following lines:
+#+begin_src ocaml
+let sigma = Evd.from_env env in
+let sigma, c = Evd.fresh_global ~rigid:Evd.univ_rigid env sigma s
+#+end_src
+* Subterm metacoq
