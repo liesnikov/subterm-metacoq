@@ -1,0 +1,6 @@
+-I ../metacoq/template-coq/build
+-Q ../metacoq/template-coq/theories MetaCoq.Template
+-Q ../metacoq/checker/theories MetaCoq.Checker
+-R ../metacoq/examples MetaCoq.Examples
+
+subterm.v
