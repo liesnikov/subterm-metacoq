@@ -14,33 +14,51 @@ Definition ind_eq (i0 : inductive) (i1 : inductive) : bool :=
   andb (String.eqb i0.(inductive_mind) i1.(inductive_mind))
        (Nat.eqb i0.(inductive_ind) i1.(inductive_ind)).
 
+Definition opt_nil {A : Type} (x : option A) : list A := match x with Some a => [a]| None => [] end.
+
+Definition clift0 (n : nat) (t : context_decl) : context_decl :=
+  {| decl_name := t.(decl_name);
+     decl_body := match t.(decl_body) with
+                  | Some q => Some (lift0 n q)
+                  | None => None
+                  end;
+     decl_type := lift0 n t.(decl_type)
+  |}.
+
 Definition subterms_for_constructor
   (refi : inductive) (ref : term) (name: ident) (ct : term) (ncons : nat) (nargs: nat)
   : list (ident * term * nat)
   := let nct := subst10 ref ct in
      let '(ctx, ap) := decompose_prod_assum [] nct in
-     let d :=(map (snd) ∘ filter (fst) ∘
-              mapi (fun i t => (* let '(ctx, ar) := decompose_prod_assum [] (decl_type t) in *)
-                            match (decl_type t) with
-                            | tInd indj _ => if ind_eq indj refi
-                                         then (true, i)
-                                         else (false, 0)
-                            | _ => (false, 0)
-                            end
-              ))
-              ctx in
+     (* now ctx is reversed list of assumptions and definitions *)
+     let d := List.concat ((map opt_nil ∘
+                  (* so this i represents distance from the innermost object *)
+                  mapi (fun i t =>
+                          let '(ctx, ar) := decompose_prod_assum [] (decl_type t)
+                          in match (fst (decompose_app ar)) with
+                             | tInd indj _ => if ind_eq indj refi
+                                             then Some (i, ctx,
+                                                        snd (decompose_app ar))
+                                             else None
+                             | _ => None
+                             end))
+                  ctx) in
      let len := List.length ctx in
-     let construct_cons := fun i =>
+     let construct_cons := fun (i: nat)
+                             (ctx': context)
+                             (args' : list term) =>
+                             let len' := List.length ctx' in
+                             let lctx' := (map (clift0 (2 + i)) ctx') in
                              it_mkProd_or_LetIn
-                                   ctx
-                                   (tApp (tRel len)
-                                     [tRel (len - (S i));
-                                      tApp (tConstruct refi ncons [])
-                                        (to_extended_list ctx)
-                                     ]
-                                   ) in
+                                   (lctx' ++ ctx)
+                                   (tApp (tRel (len + len'))
+                                         [tApp (tRel (i + len'))
+                                               (to_extended_list lctx');
+                                          tApp (tConstruct refi ncons [])
+                                               (map (lift0 len')
+                                                    (to_extended_list ctx))]) in
      let renamer := fun i => (name ++ "_subterm_" ++ (string_of_nat i))%string in
-     mapi (fun i '(rel) => (renamer i, construct_cons i, nargs)) d.
+     mapi (fun i '(n, c, a) => (renamer i, construct_cons n c a, nargs)) d.
 
 Definition subterm_for_ind
 (refi : inductive) (* reference term for the inductive type *)
@@ -76,21 +94,21 @@ Definition subterm_for_mutual_ind
 
 Inductive nnat : Type :=
   no : nnat
-| none : nnat -> nnat
-| ntwo : nnat -> nnat -> nnat.
+| none : (nat -> nnat) -> nnat.
 
 Polymorphic Definition subterm (tm : Ast.term)
   : TemplateMonad unit
   := match tm with
      | tInd ind0 _ =>
+       ge_ <- tmQuoteRec tm;;
        decl <- tmQuoteInductive (inductive_mind ind0);;
        let subt := subterm_for_mutual_ind decl ind0 tm in
        v <- tmEval cbv subt;;
        tmPrint v;;
+     (* tmPrint (print_term (fst ge_, decl.(ind_universes)) [] true v) *)
        tmMkInductive' v
      | _ => tmPrint tm;; tmFail "is not an inductive"
      end.
 
 Run TemplateProgram (subterm <%nnat%>).
-
 Print nnat_direct_subterm.
