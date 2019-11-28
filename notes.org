@@ -106,3 +106,25 @@ let sigma = Evd.from_env env in
 let sigma, c = Evd.fresh_global ~rigid:Evd.univ_rigid env sigma s
 #+end_src
 * Subterm metacoq
+* Parameters:
+from [[https://people.inf.elte.hu/divip/AgdaTutorial/Sets.Parameters_vs_Indices.html][AgdaTutorial by Diviánszky Péter]]
+"The first index can be turned into a new parameter if each constructor has the same variable on the first index position (in the result type)."
+Which means that in subterms parameters can be arbitrary, so this is a perfectly valid example of parameterized type:
+#+begin_src coq
+Inductive nnat (A : Type) : Type :=
+  n_zero : nnat A
+| n_one : (nat -> nnat (list A)) -> nnat A.
+#+end_src
+Surprisingly, coq-equations can't derive subterm relation for this.
+
+The error for the above type is:
+#+begin_src coq
+Error: Illegal application:
+The term "nnat_direct_subterm" of type "forall A : Type, nnat A -> nnat A -> Prop"
+cannot be applied to the terms
+ "A" : "Type"
+ "n n0" : "nnat (list A)"
+ "n_one A n" : "nnat A"
+The 2nd term has type "nnat (list A)" which should be coercible to
+"nnat A".
+#+end_src
