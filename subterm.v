@@ -85,6 +85,7 @@ Definition subterm_for_ind
            (ind   : one_inductive_body)
                   : one_inductive_body
   := let (pai, sort) := decompose_prod_assum [] ind.(ind_type) in
+     let sort := (tSort (Universe.make'' (Level.lProp, false) [])) in
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
      let aptype1 :=
@@ -117,9 +118,9 @@ Definition direct_subterm_for_mutual_ind
                   : mutual_inductive_body
   := let i0 := inductive_ind ind0 in
      {| ind_finite := BasicAst.Finite;
-        ind_npars := mind.(ind_npars);
-        ind_universes := mind.(ind_universes);
-        ind_params := mind.(ind_params);
+        ind_npars := 0;
+        ind_universes := Monomorphic_ctx (LevelSetProp.of_list [], ConstraintSet.empty);
+        ind_params := [];
         ind_bodies := (map (subterm_for_ind ind0 ref mind.(ind_npars) mind.(ind_params)) ∘
                       (filteri (fun (i : nat) (ind : one_inductive_body) =>
                                   if Nat.eqb i i0 then true else false)))
