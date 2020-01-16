@@ -13,7 +13,7 @@ Definition filteri {A: Type} (f : nat -> A -> bool) (l:list A) : list A :=
 
 Definition ind_eqb (i0 : inductive) (i1 : inductive) : bool :=
   andb (String.eqb i0.(inductive_mind) i1.(inductive_mind))
-       (Nat.eqb i0.(inductive_ind) i1.(inductive_ind)).
+       (Nat.eqb    i0.(inductive_ind)  i1.(inductive_ind)).
 
 Definition opt_nil {A : Type} (x : option A) : list A := match x with Some a => [a]| None => [] end.
 
@@ -27,22 +27,24 @@ Definition clift0 (n : nat) (t : context_decl) : context_decl :=
   |}.
 
 Definition subterms_for_constructor
-           (refi  : inductive)
-           (ref   : term) (* we need the term that contrains exactly this inductive just for the substition *)
+           (global_e : global_env)
+           (refi : inductive)
+           (ref   : term) (* we need the term for exactly this inductive just for the substition *)
+           (ntypes : nat) (* number of types in the mutual inductive *)
            (npars : nat) (* number of parameters in the type *)
            (nind : nat) (* number of proper indeces in the type *)
            (ct    : term) (* type of the constructor *)
            (ncons : nat) (* index of the constructor in the inductive *)
            (nargs : nat) (* number of arguments in this constructor *)
                   : list (nat * term * nat)
-  := let nct := subst10 ref ct in
+  := let nct := subst1 ref (1 + ntypes - inductive_ind refi) ct in
      let '(ctx, ap) := decompose_prod_assum [] nct in
-     (* now ctx is reversed list of assumptions and definitions *)
+     (* now ctx is a reversed list of assumptions and definitions *)
      let len := List.length ctx in
      let params := List.skipn (len - npars) (ctx) in
      let inds := List.skipn npars (snd (decompose_app ap)) in
      let d :=(List.flat_map opt_nil ∘
-                  (* so this i represents distance from the innermost object *)
+                    (* so this i represents distance from return object to `t` *)
                mapi (fun i t =>
                        let '(ctx, ar) := decompose_prod_assum [] (decl_type t)
                        in match (fst (decompose_app ar)) with
@@ -78,13 +80,15 @@ Definition subterms_for_constructor
      mapi (fun i '(n, c, a) => (i, construct_cons n c a, len + List.length c)) d.
 
 Definition subterm_for_ind
-           (refi  : inductive) (* reference term for the inductive type *)
+           (global_e : global_env)
+           (refi : inductive)
            (ref   : term)
+           (ntypes : nat) (* number of types in the mutual inductive *)
            (npars : nat)
            (pars  : context)
            (ind   : one_inductive_body)
                   : one_inductive_body
-  := let (pai, sort) := decompose_prod_assum [] ind.(ind_type) in
+  := let (pai, sort) := decompose_prod_assum global_e ind.(ind_type) in
      let sort := (tSort (Universe.make'' (Level.lProp, false) [])) in
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
@@ -107,21 +111,24 @@ Definition subterm_for_ind
         ind_ctors :=List.concat
                       (mapi (fun n '(id, ct, k) => (
                         map (fun '(si, st, sk) => (renamer id si, st, sk))
-                        (subterms_for_constructor refi ref npars leni ct n k)))
+                        (subterms_for_constructor global_e refi ref ntypes npars leni ct n k)))
                         ind.(ind_ctors));
         ind_projs := [] |}.
 
 Definition direct_subterm_for_mutual_ind
+            (ge : global_env)
             (mind : mutual_inductive_body)
             (ind0 : inductive) (* internal metacoq representation of inductive, part of tInd *)
             (ref  : term) (* reference term for the inductive type, like (tInd {| inductive_mind := "Coq.Init.Datatypes.nat"; inductive_ind := 0 |} []) *)
                   : mutual_inductive_body
   := let i0 := inductive_ind ind0 in
+     let ntypes := length (ind_bodies mind) in
      {| ind_finite := BasicAst.Finite;
         ind_npars := 0;
         ind_universes := Monomorphic_ctx (LevelSetProp.of_list [], ConstraintSet.empty);
         ind_params := [];
-        ind_bodies := (map (subterm_for_ind ind0 ref mind.(ind_npars) mind.(ind_params)) ∘
+        ind_bodies := (map (subterm_for_ind global_e ind0 ref ntypes
+                                           mind.(ind_npars) mind.(ind_params)) ∘
                       (filteri (fun (i : nat) (ind : one_inductive_body) =>
                                   if Nat.eqb i i0 then true else false)))
                       mind.(ind_bodies);
@@ -129,44 +136,18 @@ Definition direct_subterm_for_mutual_ind
 
 Polymorphic Definition subterm (tm : Ast.term)
   : TemplateMonad unit
-  := match tm with
+  :=
+    ge_t <- tmQuoteRec tm;;
+    let global_e := fst ge_t in
+    let tterm := ge_t in
+    match tterm with
      | tInd ind0 _ =>
-       (* ge_ <- tmQuoteRec tm;; *)
        decl <- tmQuoteInductive (inductive_mind ind0);;
-       let direct_subterm := direct_subterm_for_mutual_ind decl ind0 tm in
+       let direct_subterm := direct_subterm_for_mutual_ind global_e decl ind0 tm in
+       v <- tmEval lazy direct_subterm;;
+       tmPrint v;;
        tmMkInductive' direct_subterm
-       (* v <- tmEval direct_subterm;;
-          tmPrint v;; *)
-     | _ => tmPrint tm;; tmFail "is not an inductive"
+     | _ =>
+       tmPrint tm;;
+       tmFail "is not an inductive"
      end.
-
-Inductive finn (A : Type) : nat -> Set :=
-  F1n : forall n : nat, finn A (S n)
-| FSn : forall n : nat, finn A n -> finn A (S n).
-
-Inductive fin : nat -> Type :=
-  F1 : forall n : nat, fin (let x := S n in x)
-| FS : forall n : nat, fin n -> fin (S n).
-
-Run TemplateProgram (subterm <%list%>).
-Print list_direct_subterm.
-
-Definition scope := nat.
-Inductive scope_le : scope -> scope -> Set :=
-| scope_le_n : forall {n m}, n = m -> scope_le n m
-| scope_le_S : forall {n m}, scope_le n m -> scope_le n (S m)
-| scope_le_map : forall {n m}, scope_le n m -> scope_le (S n) (S m)
-.
-
-Run TemplateProgram (subterm <%scope_le%>).
-
-(*
-Inductive
-scope_le_direct_subterm
-    : forall H H0 H1 H2 : scope, scope_le H H0 -> scope_le H1 H2 -> Set :=
-    scope_le_S_subterm0 : forall (n m : scope) (H : scope_le n m),
-                          scope_le_direct_subterm n m n (S m) H (scope_le_S H)
-  | scope_le_map_subterm0 : forall (n m : scope) (H : scope_le n m),
-                            scope_le_direct_subterm n m 
-                              (S n) (S m) H (scope_le_map H)
-*)
