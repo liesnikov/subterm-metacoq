@@ -36,7 +36,7 @@ Definition subterms_for_constructor
            (ncons : nat) (* index of the constructor in the inductive *)
            (nargs : nat) (* number of arguments in this constructor *)
                   : list (nat * term * nat)
-  := let nct := subst1 ref (1 + ntypes - inductive_ind refi) ct in
+  := let nct := subst1 ref (ntypes - inductive_ind refi - 1) ct in
      let '(ctx, ap) := decompose_prod_assum [] nct in
      (* now ctx is a reversed list of assumptions and definitions *)
      let len := List.length ctx in
@@ -101,10 +101,11 @@ Definition subterm_for_ind
         (* type_for_direct_subterm npars *)
         ind_type  := it_mkProd_or_LetIn
                        pars
-                       (it_mkProd_or_LetIn
-                          (inds ++ inds)
-                          (tProd nAnon aptype1
-                                 (tProd nAnon aptype2 sort)));
+                    (it_mkProd_or_LetIn
+                       (inds ++ inds)
+                    (it_mkProd_or_LetIn
+                        ((mkdecl nAnon None aptype2)::[mkdecl nAnon None aptype1])
+                        sort));
         ind_kelim := [InProp];
         ind_ctors :=List.concat
                       (mapi (fun n '(id, ct, k) => (
