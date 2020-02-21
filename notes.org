@@ -70,7 +70,7 @@ Cumulative Inductive TemplateMonad@{t u} : Type@{t} -> Prop :=
 #+END_SRC
 ** AST definition
 [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/Ast.v][metacoq definition]]
-#+begin_src coq
+#+begin_src Coq
 Inductive term : Set :=
 | tRel (n : nat)
 | tVar (id : ident) (* For free variables (e.g. in a goal) *)
@@ -96,6 +96,58 @@ And =inductive= in this case stands for
 type inductive = { inductive_mind : kername; inductive_ind : nat }
 #+end_src
 in [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/gen-src/basicAst.mli][basicAst.mli]]
+** Declared and typed
++ [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/EnvironmentTyping.v][EnvironmentTyping.v]]
+  #+begin_src coq
+  Definition declared_minductive Σ mind decl :=
+    lookup_env Σ mind = Some (InductiveDecl mind decl).
+  Definition declared_inductive Σ mdecl ind decl :=
+    declared_minductive Σ (inductive_mind ind) mdecl /\
+    List.nth_error mdecl.(ind_bodies) (inductive_ind ind) = Some decl.
+  #+end_src
+  #+begin_src coq
+  Definition Forall_decls_typing `{checker_flags}
+            (P : global_env_ext -> context -> term -> term -> Type)
+    := on_global_env (lift_typing P).
+  #+end_src
++ [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/checker/theories/Typing.v][Typing.v]]
+  #+begin_src coq
+  Inductive typing `{checker_flags} (Σ : global_env_ext) (Γ : context) : term -> term -> Type := .
+  Definition wf `{checker_flags} := Forall_decls_typing typing.
+  Definition wf_ext `{checker_flags} := on_global_env_ext (lift_typing typing).
+  #+end_src
++ [[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/Environment.v][Environment.v]]
+  #+begin_src coq
+    Record context_decl := mkdecl {
+      decl_name : name ;
+      decl_body : option term ;
+      decl_type : term
+    }.
+    Definition context := list context_decl.
+  #+end_src
+** Environment
+[[file:~/my-dir/ed/uni/saar/prjcts/coq/metacoq/template-coq/theories/Environment.v][Environment.v]]
+#+begin_src coq
+(** See [mutual_inductive_body] from [declarations.ml]. *)
+Record mutual_inductive_body := {
+  ind_finite : recursivity_kind;
+  ind_npars : nat;
+  ind_params : context;
+  ind_bodies : list one_inductive_body ;
+  ind_universes : universes_decl }.
+
+(** See [constant_body] from [declarations.ml] *)
+Record constant_bzody := {
+    cst_type : term;
+    cst_body : option term;
+    cst_universes : universes_decl }.
+
+Inductive global_decl :=
+| ConstantDecl : kername -> constant_body -> global_decl
+| InductiveDecl : kername -> mutual_inductive_body -> global_decl.
+
+Definition global_env := list global_decl.
+#+end_src
 * Equations
 ** Subterm relation
 [[file:~/my-dir/ed/uni/saar/prjcts/coq/Coq-Equations/src/subterm.ml][equations definition]]
