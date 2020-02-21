@@ -5,13 +5,16 @@ Require Import MetaCoq.Template.All.
 Require Import String.
 Import MonadNotation.
 
-Inductive finn (A : Type) : nat -> Set :=
-  F1n : forall n : nat, finn A (S n)
-| FSn : forall n : nat, finn A n -> finn A (S n).
-
-Inductive fin : nat -> Type :=
+Inductive finn : forall A: Type, nat -> Type :=
+  F1n : forall (A : Type) (n : nat), finn A (S n)
+| FSn : forall (A : Type) (n : nat), finn A n -> finn A (S n)
+with fin : nat -> Type :=
   F1 : forall n : nat, fin (let x := S n in x)
 | FS : forall n : nat, fin n -> fin (S n).
+
+Run TemplateProgram (p <- tmQuote fin;; tmPrint p ).
+(* Run TemplateProgram (subterm <%fin%>).
+Print fin_direct_subterm. *)
 
 Definition printer (tm : Ast.term)
   : TemplateMonad unit
@@ -21,9 +24,12 @@ Definition printer (tm : Ast.term)
        tmPrint d
      | _ => tmFail "sorry"
      end.
-Run TemplateProgram (printer <%list%>).
+Run TemplateProgram (p <- tmQuote fin;; tmPrint p ).
+
+Run TemplateProgram (tmQuoteRec <%list%>).
 
 Run TemplateProgram (subterm <%list%>).
+
 
 (* Derive Subterm for list. *)
 Run TemplateProgram (printer <%list_direct_subterm%>).
@@ -52,6 +58,7 @@ Inductive scope_le : scope -> scope -> Set :=
 
 Run TemplateProgram (subterm <%scope_le%>).
 
+Print scope_le_direct_subterm.
 (*
 Inductive
 scope_le_direct_subterm
