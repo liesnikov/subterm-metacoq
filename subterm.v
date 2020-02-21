@@ -27,7 +27,6 @@ Definition clift0 (n : nat) (t : context_decl) : context_decl :=
   |}.
 
 Definition subterms_for_constructor
-           (global_e : global_env)
            (refi : inductive)
            (ref   : term) (* we need the term for exactly this inductive just for the substition *)
            (ntypes : nat) (* number of types in the mutual inductive *)
@@ -80,7 +79,6 @@ Definition subterms_for_constructor
      mapi (fun i '(n, c, a) => (i, construct_cons n c a, len + List.length c)) d.
 
 Definition subterm_for_ind
-           (global_e : global_env)
            (refi : inductive)
            (ref   : term)
            (ntypes : nat) (* number of types in the mutual inductive *)
@@ -88,8 +86,8 @@ Definition subterm_for_ind
            (pars  : context)
            (ind   : one_inductive_body)
                   : one_inductive_body
-  := let (pai, sort) := decompose_prod_assum global_e ind.(ind_type) in
-     let sort := (tSort (Universe.make'' (Level.lProp, false) [])) in
+  := let (pai, _) := decompose_prod_assum [] ind.(ind_type) in
+     let sort := (tSort (Universe.make' (Level.lProp, false))) in
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
      let aptype1 :=
@@ -111,42 +109,47 @@ Definition subterm_for_ind
         ind_ctors :=List.concat
                       (mapi (fun n '(id, ct, k) => (
                         map (fun '(si, st, sk) => (renamer id si, st, sk))
-                        (subterms_for_constructor global_e refi ref ntypes npars leni ct n k)))
+                        (subterms_for_constructor refi ref ntypes npars leni ct n k)))
                         ind.(ind_ctors));
         ind_projs := [] |}.
 
 Definition direct_subterm_for_mutual_ind
-            (ge : global_env)
             (mind : mutual_inductive_body)
             (ind0 : inductive) (* internal metacoq representation of inductive, part of tInd *)
             (ref  : term) (* reference term for the inductive type, like (tInd {| inductive_mind := "Coq.Init.Datatypes.nat"; inductive_ind := 0 |} []) *)
-                  : mutual_inductive_body
+                  : option mutual_inductive_body
   := let i0 := inductive_ind ind0 in
-     let ntypes := length (ind_bodies mind) in
-     {| ind_finite := BasicAst.Finite;
+    let ntypes := List.length (ind_bodies mind) in
+    b <- List.nth_error mind.(ind_bodies) i0;;
+    ret {|
+        ind_finite := BasicAst.Finite;
         ind_npars := 0;
         ind_universes := Monomorphic_ctx (LevelSetProp.of_list [], ConstraintSet.empty);
         ind_params := [];
-        ind_bodies := (map (subterm_for_ind global_e ind0 ref ntypes
-                                           mind.(ind_npars) mind.(ind_params)) ∘
-                      (filteri (fun (i : nat) (ind : one_inductive_body) =>
-                                  if Nat.eqb i i0 then true else false)))
-                      mind.(ind_bodies);
+        ind_bodies := [subterm_for_ind ind0 ref ntypes
+                                       mind.(ind_npars) mind.(ind_params) b]
+
      |}.
 
 Polymorphic Definition subterm (tm : Ast.term)
   : TemplateMonad unit
   :=
-    ge_t <- tmQuoteRec tm;;
+    (* ge_t <- tmQuoteRec tm;;
     let global_e := fst ge_t in
-    let tterm := ge_t in
-    match tterm with
+    let tterm := ge_t in *)
+    match tm with
      | tInd ind0 _ =>
        decl <- tmQuoteInductive (inductive_mind ind0);;
-       let direct_subterm := direct_subterm_for_mutual_ind global_e decl ind0 tm in
-       v <- tmEval lazy direct_subterm;;
-       tmPrint v;;
-       tmMkInductive' direct_subterm
+       let direct_subterm := direct_subterm_for_mutual_ind decl ind0 tm in
+       match direct_subterm with
+       | None =>
+         tmPrint tm;;
+         tmFail "Coulnd't construct a subterm"
+       | Some d =>
+         v <- tmEval lazy d;;
+         tmPrint v;;
+         tmMkInductive' d
+       end
      | _ =>
        tmPrint tm;;
        tmFail "is not an inductive"
