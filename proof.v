@@ -6,7 +6,7 @@ Require Import String.
 Require Import List.
 Import ListNotations.
 
-Ltac inj H := (injection H; clear H; intros H).
+Ltac inj H := (injection H; clear H; intro H).
 
 Lemma ind_inversion:
   forall Sigma mind_body ind,
@@ -36,6 +36,25 @@ Proof.
       constructor; assumption. exists [d]. reflexivity. assumption.
 Qed.
 
+Lemma decompose_it_mkProd l m:
+  forall c s, (forall n, (c ++ n, s) = decompose_prod_assum n m) ->
+  decompose_prod_assum [] (it_mkProd_or_LetIn l m) = (c ++ l, s).
+Proof.
+  induction l in m |- *; intros c s e; cbn.
+  - specialize e with []. rewrite app_nil_r in e. now rewrite app_nil_r.
+  - cbn. change ((fold_left (fun acc d => mkProd_or_LetIn d acc) l (mkProd_or_LetIn a m))) with (it_mkProd_or_LetIn l (mkProd_or_LetIn a m)).
+    assert (c ++ a :: l = (c ++ [a]) ++ l) as cal. (induction c in |- *; auto; rewrite <- app_comm_cons; rewrite IHc; now rewrite app_comm_cons).
+    rewrite cal. apply (IHl (mkProd_or_LetIn a m)).
+    unfold mkProd_or_LetIn.
+    destruct (decl_body a) eqn: bae; cbn;
+    intros n; rewrite <- (app_assoc c [a] n); unfold snoc.
+    + assert (vdef (decl_name a) t (decl_type a) = a) as vae.
+      (destruct a eqn: eqa; unfold vdef; rewrite <- bae; now reflexivity).
+      rewrite vae. exact (e ([a] ++ n)).
+    + assert (vass (decl_name a) (decl_type a) = a) as vae.
+      (destruct a eqn: eqa; unfold vass; rewrite <- bae; now reflexivity).
+      rewrite vae. exact (e ([a] ++ n)).
+Qed.
 
 Lemma Alli_nth_error {A : Type} P m (l : list A):
         Alli P m l ->
@@ -73,24 +92,40 @@ Proof.
     + destruct (ind_inversion Sigma mind_body ind WF DM).
       rewrite <- Sv; constructor.
       pose (universes_decl_of_decl
-             (InductiveDecl (inductive_mind ind) mind_body)) as u.
+              (InductiveDecl (inductive_mind ind) mind_body)) as u.
       destruct (Alli_nth_error
                   (on_ind_body (lift_typing typing)
                                (Sigma, u)
                                (inductive_mind ind) mind_body)
-                  0 _ onInductives _ o ind_body) eqn: X_eq.
-      2: constructor. econstructor.
-      * unfold subterm_for_ind.
+                  0 _ onInductives _ o ind_body).
+      2: constructor. eapply (Build_on_ind_body _ _ _ _ _ _ _ _).
+      * cbn. unfold subterm_for_ind.
         rewrite ind_arity_eq.
         destruct decompose_prod_assum eqn: decomp_eq.
         pose (surjective_pairing (c,t)) as decomp_eq_h.
-        rewrite it_mkProd_assoc. rewrite it_mkProd_assoc.
+        unfold ind_type.
+        repeat (rewrite it_mkProd_assoc).
         rewrite <- decomp_eq in decomp_eq_h at 2 3. inversion decomp_eq_h.
         reflexivity.
       * unfold subterm_for_ind.
         rewrite ind_arity_eq.
         destruct decompose_prod_assum eqn: decomp_eq.
-        cbn.
 
+        rewrite it_mkProd_assoc. exists (Universe.make' (Level.lProp, false)).
+        rewrite it_mkProd_assoc in decomp_eq.
+        erewrite decompose_it_mkProd in decomp_eq.
+
+        Focus 2. intro. (* ?c *) Existential 13 := []. reflexivity.
+        rewrite app_nil_l in decomp_eq.
+        inversion decomp_eq.
+        rewrite app_length, PeanoNat.Nat.add_sub, firstn_app, PeanoNat.Nat.sub_diag, firstn_all, app_nil_r. cbn. admit.
+      * admit.
+      * intros. unfold subterm_for_ind in H. unfold ind_projs in H. destruct (decompose_prod_assum [] (ind_type o)). now contradiction H.
+      * cbn. intros x H. unfold subterm_for_ind in H. unfold ind_kelim in H.
+        destruct (decompose_prod_assum [] (ind_type o)).
+        induction H. rewrite <- H. now cbn. inversion H.
+      Unshelve.
     + cbn. constructor.
 Abort.
+
+
