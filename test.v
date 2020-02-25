@@ -5,17 +5,6 @@ Require Import MetaCoq.Template.All.
 Require Import String.
 Import MonadNotation.
 
-Inductive finn : forall A: Type, nat -> Type :=
-  F1n : forall (A : Type) (n : nat), finn A (S n)
-| FSn : forall (A : Type) (n : nat), finn A n -> finn A (S n)
-with fin : nat -> Type :=
-  F1 : forall n : nat, fin (let x := S n in x)
-| FS : forall n : nat, fin n -> fin (S n).
-
-Run TemplateProgram (p <- tmQuote fin;; tmPrint p ).
-(* Run TemplateProgram (subterm <%fin%>).
-Print fin_direct_subterm. *)
-
 Definition printer (tm : Ast.term)
   : TemplateMonad unit
   := match tm with
@@ -23,15 +12,27 @@ Definition printer (tm : Ast.term)
        d <- tmQuoteInductive (inductive_mind ind0);;
        tmPrint d
      | _ => tmFail "sorry"
-     end.
+    end.
+
+Inductive finn A : list(A) -> nat -> Type :=
+  F1n : forall (l : list A) (n : nat), finn A l (S n)
+| FSn : forall (l : list A) (n : nat), finn A l n -> finn A l (S n).
+
+Inductive fin : nat -> Type :=
+  F1 : forall n : nat, fin (let x := S n in x)
+| FS : forall n : nat, fin n -> fin (S n).
+
+Run TemplateProgram (printer <%finn%>).
+Run TemplateProgram (subterm <%finn%>).
+Print finn_direct_subterm.
+
+
 Run TemplateProgram (p <- tmQuote fin;; tmPrint p ).
 
-Run TemplateProgram (tmQuoteRec <%list%>).
-
+Run TemplateProgram (printer <%list%>).
 Run TemplateProgram (subterm <%list%>).
+(*Derive Subterm for list.*)
 
-
-(* Derive Subterm for list. *)
 Run TemplateProgram (printer <%list_direct_subterm%>).
 
 Print list_direct_subterm.

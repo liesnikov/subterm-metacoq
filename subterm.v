@@ -82,12 +82,12 @@ Definition subterm_for_ind
            (refi : inductive)
            (ref   : term)
            (ntypes : nat) (* number of types in the mutual inductive *)
-           (npars : nat)
            (pars  : context)
            (ind   : one_inductive_body)
                   : one_inductive_body
   := let (pai, _) := decompose_prod_assum [] ind.(ind_type) in
-     let sort := (tSort (Universe.make' (Level.lProp, false))) in
+    let sort := (tSort (Universe.make' (Level.lProp, false))) in
+    let npars := List.length pars in
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
      let aptype1 :=
@@ -102,10 +102,12 @@ Definition subterm_for_ind
         ind_type  := it_mkProd_or_LetIn
                        pars
                     (it_mkProd_or_LetIn
-                       (inds ++ inds)
+                       (inds)
+                    (it_mkProd_or_LetIn
+                       (map (clift0 (leni)) inds)
                     (it_mkProd_or_LetIn
                         ((mkdecl nAnon None aptype2)::[mkdecl nAnon None aptype1])
-                        sort));
+                        sort)));
         ind_kelim := [InProp];
         ind_ctors :=List.concat
                       (mapi (fun n '(id, ct, k) => (
@@ -127,8 +129,7 @@ Definition direct_subterm_for_mutual_ind
         ind_npars := 0;
         ind_universes := Monomorphic_ctx (LevelSetProp.of_list [], ConstraintSet.empty);
         ind_params := [];
-        ind_bodies := [subterm_for_ind ind0 ref ntypes
-                                       mind.(ind_npars) mind.(ind_params) b]
+        ind_bodies := [subterm_for_ind ind0 ref ntypes mind.(ind_params) b]
 
      |}.
 
