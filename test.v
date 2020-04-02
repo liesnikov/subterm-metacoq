@@ -2,39 +2,36 @@ Require Import Local.subterm.
 
 Require Import Equations.Equations.
 Require Import MetaCoq.Template.All.
-Require Import String.
+Require Import String List.
+Import ListNotations.
 Import MonadNotation.
+
+
 
 Definition printer (tm : Ast.term)
   : TemplateMonad unit
-  := match tm with
+  :=  match tm with
      | tInd ind0 _ =>
        d <- tmQuoteInductive (inductive_mind ind0);;
        tmPrint d
      | _ => tmFail "sorry"
-    end.
+     end.
 
-Inductive finn A : list(A) -> nat -> Type :=
-  F1n : forall (l : list A) (n : nat), finn A l (S n)
-| FSn : forall (l : list A) (n : nat), finn A l n -> finn A l (S n).
+Section Test.
+  Variable p : Type.
+  Variable pc : p.
+  Inductive test : p -> Type:= .
+End Test.
 
-Inductive fin : nat -> Type :=
-  F1 : forall n : nat, fin (let x := S n in x)
-| FS : forall n : nat, fin n -> fin (S n).
-
-Run TemplateProgram (printer <%finn%>).
-Run TemplateProgram (subterm <%finn%>).
-Print finn_direct_subterm.
+MetaCoq Run (printer <%test%>).
 
 
-Run TemplateProgram (p <- tmQuote fin;; tmPrint p ).
 
-Run TemplateProgram (printer <%list%>).
-Run TemplateProgram (subterm <%list%>).
+MetaCoq Run (printer <%list%>).
+MetaCoq Run (subterm <%list%>).
 (*Derive Subterm for list.*)
-
-Run TemplateProgram (printer <%list_direct_subterm%>).
-
+Compute (<%list_direct_subterm%>).
+MetaCoq Run (printer <%list_direct_subterm%>).
 Print list_direct_subterm.
 
 Inductive even : nat -> Prop :=
@@ -45,10 +42,30 @@ with  dummy : nat -> Prop :=
 with odd : nat -> Prop :=
 | odd_S : forall n, even n -> odd (S n).
 
-Run TemplateProgram (printer <%even%>).
 
-Run TemplateProgram (subterm <%odd%>).
+
+MetaCoq Run (printer <%even%>).
+
+MetaCoq Run (subterm <%odd%>).
 Print odd_direct_subterm.
+
+
+Inductive finn A : list(A) -> nat -> Type :=
+  F1n : forall (l : list A) (n : nat), finn A l (S n)
+| FSn : let p := list A in forall (l : p) (n : nat), finn A l n -> finn A l (S n).
+
+Inductive fin A (p : (finn A [] 0)): nat -> Type :=
+  F1 : forall n : nat, fin A p (let x := S n in x)
+| FS : forall n : nat, fin A p n -> fin A p (S n).
+
+MetaCoq Run (printer <%finn%>).
+MetaCoq Run (subterm <%finn%>).
+(*Derive Subterm for finn.*)
+MetaCoq Run (printer <%finn_direct_subterm%>).
+Print finn_direct_subterm.
+
+
+MetaCoq Run (p <- tmQuote fin;; tmPrint p ).
 
 Definition scope := nat.
 Inductive scope_le : scope -> scope -> Set :=
@@ -57,7 +74,7 @@ Inductive scope_le : scope -> scope -> Set :=
 | scope_le_map : forall {n m}, scope_le n m -> scope_le (S n) (S m)
 .
 
-Run TemplateProgram (subterm <%scope_le%>).
+MetaCoq Run (subterm <%scope_le%>).
 
 Print scope_le_direct_subterm.
 (*

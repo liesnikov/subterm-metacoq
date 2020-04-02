@@ -15,8 +15,6 @@ Definition ind_eqb (i0 : inductive) (i1 : inductive) : bool :=
   andb (String.eqb i0.(inductive_mind) i1.(inductive_mind))
        (Nat.eqb    i0.(inductive_ind)  i1.(inductive_ind)).
 
-Definition opt_nil {A : Type} (x : option A) : list A := match x with Some a => [a]| None => [] end.
-
 Definition clift0 (n : nat) (t : context_decl) : context_decl :=
   {| decl_name := t.(decl_name);
      decl_body := match t.(decl_body) with
@@ -36,36 +34,38 @@ Definition subterms_for_constructor
            (ncons : nat) (* index of the constructor in the inductive *)
            (nargs : nat) (* number of arguments in this constructor *)
                   : list (nat * term * nat)
-  := let nct := subst1 ref (ntypes - inductive_ind refi - 1) ct in
-     let '(ctx, ap) := decompose_prod_assum [] nct in
-     (* now ctx is a reversed list of assumptions and definitions *)
-     let len := List.length ctx in
-     let params := List.skipn (len - npars) (ctx) in
-     let inds := List.skipn npars (snd (decompose_app ap)) in
-     let d :=(List.flat_map opt_nil ∘
-                    (* so this i represents distance from return object to `t` *)
-               mapi (fun i t =>
-                       let '(ctx, ar) := decompose_prod_assum [] (decl_type t)
-                       in match (fst (decompose_app ar)) with
-                          | tInd indj _ => if ind_eqb indj refi
-                                          then Some (i, ctx,
-                                                     snd (decompose_app ar))
-                                          else None
-                          | _ => None
-                          end)) ctx in
-     let construct_cons :=
-         fun (* index of a subterm in this constructor *)
-           (i: nat)
-           (* these are arguments for the function
-              that is a parameter of the constructor
-              and if applied fully returns something of the needed type *)
-           (ctx': context)
-           (* these are arguments of the type of the subterm *)
-           (args' : list term) =>
-           let len' := List.length ctx' in
-           let ctxl' := (map (clift0 (2 + i)) ctx') in
-           it_mkProd_or_LetIn
-             (ctxl' ++ ctx)
+  := let indrel := (ntypes - inductive_ind refi - 1) in
+    (*let nct := subst1 ref indrel ct in*)
+    let '(ctx, ap) := decompose_prod_assum [] ct in
+    (*    ^ now ctx is a reversed list of assumptions and definitions *)
+    let len := List.length ctx in
+    let params := List.skipn (len - npars) (ctx) in
+    let inds := List.skipn npars (snd (decompose_app ap)) in
+    let d :=List.concat (
+           (* so this i represents distance from return object to `t` *)
+              mapi (fun i t =>
+                      let '(ctx, ar) := decompose_prod_assum [] (decl_type t)
+                      in let p := (indrel + (len - i - 1) + List.length (ctx))
+                      in match (fst (decompose_app ar)) with
+                         | tRel j => if Nat.eqb p j
+                                    then [(i, ctx, snd (decompose_app ar))]
+                                    else []
+                         | _ => []
+                         end) ctx) in
+    let '(ctx_sbst, _) := decompose_prod_assum [] (subst1 ref indrel ct) in
+    let construct_cons :=
+        fun (* index of a subterm in this constructor *)
+          (i: nat)
+          (* these are arguments for the function
+             that is a parameter of the constructor
+             and if applied fully returns something of the needed type *)
+          (ctx': context)
+          (* these are arguments of the type of the subterm *)
+          (args' : list term) =>
+          let len' := List.length ctx' in
+          let ctxl' := (map (clift0 (2 + i)) ctx') in
+          it_mkProd_or_LetIn
+             (ctxl' ++ ctx_sbst)
              (tApp (tRel (len + len'))
                    ((map (lift0 (len' + len - npars))
                          (to_extended_list params)) ++
@@ -73,10 +73,9 @@ Definition subterms_for_constructor
                     (map (lift0 len') inds) ++
                     [tApp (tRel (i + len'))
                           (to_extended_list ctxl');
-                     tApp (tConstruct refi ncons [])
-                          (map (lift0 len')
-                               (to_extended_list ctx))])) in
-     mapi (fun i '(n, c, a) => (i, construct_cons n c a, len + List.length c)) d.
+                    tApp (tConstruct refi ncons [])
+                         (map (lift0 len') (to_extended_list ctx_sbst))])) in
+    mapi (fun i '(n, c, a) => (i, construct_cons n c a, len + List.length c)) d.
 
 Definition subterm_for_ind
            (refi : inductive)
@@ -86,7 +85,7 @@ Definition subterm_for_ind
            (ind   : one_inductive_body)
                   : one_inductive_body
   := let (pai, _) := decompose_prod_assum [] ind.(ind_type) in
-    let sort := (tSort (Universe.make' (Level.lProp, false))) in
+    let sort := (tSort (Universe.make' UnivExpr.lProp)) in
     let npars := List.length pars in
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
@@ -106,12 +105,12 @@ Definition subterm_for_ind
                     (it_mkProd_or_LetIn
                        (map (clift0 (leni)) inds)
                     (it_mkProd_or_LetIn
-                        ((mkdecl nAnon None aptype2)::[mkdecl nAnon None aptype1])
+                        [mkdecl nAnon None aptype2; mkdecl nAnon None aptype1]
                         sort)));
-        ind_kelim := [InProp];
+        ind_kelim := InProp;
         ind_ctors :=List.concat
-                      (mapi (fun n '(id, ct, k) => (
-                        map (fun '(si, st, sk) => (renamer id si, st, sk))
+                      (mapi (fun n '(id', ct, k) => (
+                        map (fun '(si, st, sk) => (renamer id' si, st, sk))
                         (subterms_for_constructor refi ref ntypes npars leni ct n k)))
                         ind.(ind_ctors));
         ind_projs := [] |}.
@@ -127,10 +126,10 @@ Definition direct_subterm_for_mutual_ind
     ret {|
         ind_finite := BasicAst.Finite;
         ind_npars := 0;
-        ind_universes := Monomorphic_ctx (LevelSetProp.of_list [], ConstraintSet.empty);
+        ind_universes := ind_universes mind;
         ind_params := [];
-        ind_bodies := [subterm_for_ind ind0 ref ntypes mind.(ind_params) b]
-
+        ind_bodies := [subterm_for_ind ind0 ref ntypes mind.(ind_params) b];
+        ind_variance := None
      |}.
 
 Polymorphic Definition subterm (tm : Ast.term)
@@ -149,7 +148,7 @@ Polymorphic Definition subterm (tm : Ast.term)
          tmFail "Coulnd't construct a subterm"
        | Some d =>
          v <- tmEval lazy d;;
-         tmPrint v;;
+         tmPrint v ;;
          tmMkInductive' d
        end
      | _ =>
