@@ -1,4 +1,7 @@
-Require Import MetaCoq.Template.All.
+From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICLiftSubst.
+From MetaCoq.PCUIC Require TemplateToPCUIC PCUICToTemplate.
+From MetaCoq.Template Require Import config monad_utils utils TemplateMonad.
+From MetaCoq.Template Require Ast.
 Require Import List String Relation_Operators.
 Import ListNotations MonadNotation.
 
@@ -66,14 +69,14 @@ Definition subterms_for_constructor
           let ctxl' := (map (clift0 (2 + i)) ctx') in
           it_mkProd_or_LetIn
              (ctxl' ++ ctx_sbst)
-             (tApp (tRel (len + len'))
+             (mkApps (tRel (len + len'))
                    ((map (lift0 (len' + len - npars))
                          (to_extended_list params)) ++
                     (map (lift (1 + i + len') len') (List.skipn npars args')) ++
                     (map (lift0 len') inds) ++
-                    [tApp (tRel (i + len'))
+                    [mkApps (tRel (i + len'))
                           (to_extended_list ctxl');
-                    tApp (tConstruct refi ncons [])
+                     mkApps (tConstruct refi ncons [])
                          (map (lift0 len') (to_extended_list ctx_sbst))])) in
     mapi (fun i '(n, c, a) => (i, construct_cons n c a, len + List.length c)) d.
 
@@ -90,10 +93,10 @@ Definition subterm_for_ind
      let inds := List.firstn (List.length pai - npars) pai in
      let leni := List.length inds in
      let aptype1 :=
-         tApp ref ((map (lift0 (2 * leni)) (to_extended_list pars)) ++
+         mkApps ref ((map (lift0 (2 * leni)) (to_extended_list pars)) ++
                    (map (lift0 leni) (to_extended_list inds))) in
      let aptype2 :=
-         tApp ref ((map (lift0 (1 + 2 * leni)) (to_extended_list pars)) ++
+         mkApps ref ((map (lift0 (1 + 2 * leni)) (to_extended_list pars)) ++
                    (map (lift0 1) (to_extended_list inds))) in
      let renamer name i := (name ++ "_subterm" ++ (string_of_nat i))%string in
      {| ind_name := (ind.(ind_name) ++ "_direct_subterm")%string;
@@ -115,6 +118,7 @@ Definition subterm_for_ind
                         ind.(ind_ctors));
         ind_projs := [] |}.
 
+
 Definition direct_subterm_for_mutual_ind
             (mind : mutual_inductive_body)
             (ind0 : inductive) (* internal metacoq representation of inductive, part of tInd *)
@@ -122,7 +126,7 @@ Definition direct_subterm_for_mutual_ind
                   : option mutual_inductive_body
   := let i0 := inductive_ind ind0 in
     let ntypes := List.length (ind_bodies mind) in
-    b <- List.nth_error mind.(ind_bodies) i0;;
+    b <- List.nth_error mind.(ind_bodies) i0 ;;
     ret {|
         ind_finite := BasicAst.Finite;
         ind_npars := 0;
@@ -130,28 +134,24 @@ Definition direct_subterm_for_mutual_ind
         ind_params := [];
         ind_bodies := [subterm_for_ind ind0 ref ntypes mind.(ind_params) b];
         ind_variance := None
-     |}.
+      |}.
 
-Polymorphic Definition subterm (tm : Ast.term)
+Definition subterm (t : Ast.term)
   : TemplateMonad unit
-  :=
-    (* ge_t <- tmQuoteRec tm;;
-    let global_e := fst ge_t in
-    let tterm := ge_t in *)
-    match tm with
-     | tInd ind0 _ =>
-       decl <- tmQuoteInductive (inductive_mind ind0);;
-       let direct_subterm := direct_subterm_for_mutual_ind decl ind0 tm in
-       match direct_subterm with
-       | None =>
-         tmPrint tm;;
-         tmFail "Coulnd't construct a subterm"
-       | Some d =>
-         v <- tmEval lazy d;;
-         tmPrint v ;;
-         tmMkInductive' d
-       end
-     | _ =>
-       tmPrint tm;;
-       tmFail "is not an inductive"
-     end.
+  := match t with
+    | Ast.tInd ind0 _ =>
+      decl <- tmQuoteInductive (inductive_mind ind0);;
+      match (subterm.direct_subterm_for_mutual_ind
+               (TemplateToPCUIC.trans_minductive_body decl)
+               ind0
+               (TemplateToPCUIC.trans t)) with
+      | None =>
+        tmPrint t;;
+        @tmFail unit "Coulnd't construct a subterm"
+      | Some d =>
+        tmMkInductive' (PCUICToTemplate.trans_minductive_body d)
+      end
+    | _ =>
+      tmPrint t;;
+      @tmFail unit " is not an inductive"
+    end.

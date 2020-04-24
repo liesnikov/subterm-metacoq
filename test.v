@@ -1,18 +1,19 @@
-Require Import Local.subterm.
+From Local Require Import subterm.
 
-Require Import Equations.Equations.
-Require Import MetaCoq.Template.All.
-Require Import String List.
-Import ListNotations.
+From MetaCoq.Template Require Import config monad_utils utils TemplateMonad.
+From MetaCoq.Template Require Ast BasicAst.
 Import MonadNotation.
 
+Require Import String List.
+Import ListNotations.
 
+Require Import Equations.Equations.
 
 Definition printer (tm : Ast.term)
   : TemplateMonad unit
   :=  match tm with
-     | tInd ind0 _ =>
-       d <- tmQuoteInductive (inductive_mind ind0);;
+     | Ast.tInd ind0 _ =>
+       d <- tmQuoteInductive (BasicAst.inductive_mind ind0);;
        tmPrint d
      | _ => tmFail "sorry"
      end.
@@ -22,6 +23,8 @@ Section Test.
   Variable pc : p.
   Inductive test : p -> Type:= .
 End Test.
+
+From MetaCoq.Template Require Import All.
 
 MetaCoq Run (printer <%test%>).
 
@@ -55,7 +58,7 @@ Inductive finn A : list(A) -> nat -> Type :=
 | FSn : let p := list A in forall (l : p) (n : nat), finn A l n -> finn A l (S n).
 
 Inductive fin A (p : (finn A [] 0)): nat -> Type :=
-  F1 : forall n : nat, fin A p (let x := S n in x)
+  F1 : forall n : nat, fin A p (S n)
 | FS : forall n : nat, fin A p n -> fin A p (S n).
 
 MetaCoq Run (printer <%finn%>).
