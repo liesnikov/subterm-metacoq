@@ -10,17 +10,6 @@ Import ListNotations.
 
 From Local Require Import non_uniform.
 
-Definition filteri {A: Type} (f : nat -> A -> bool) (l:list A) : list A :=
-  let go := fix go n l := match l with
-                         | nil => nil
-                         | x :: l => if f n x then x::(go (S n) l) else go (S n) l
-                         end
-  in go 0 l.
-
-Definition ind_eqb (i0 : inductive) (i1 : inductive) : bool :=
-  andb (String.eqb i0.(inductive_mind) i1.(inductive_mind))
-       (Nat.eqb    i0.(inductive_ind)  i1.(inductive_ind)).
-
 Definition clift0 (n : nat) (t : context_decl) : context_decl :=
   {| decl_name := t.(decl_name);
      decl_body := match t.(decl_body) with
@@ -41,7 +30,6 @@ Definition subterms_for_constructor
            (nargs : nat) (* number of arguments in this constructor *)
                   : list (nat * term * nat)
   := let indrel := (ntypes - inductive_ind refi - 1) in
-    (*let nct := subst1 ref indrel ct in*)
     let '(ctx, ap) := decompose_prod_assum [] ct in
     (*    ^ now ctx is a reversed list of assumptions and definitions *)
     let len := List.length ctx in
@@ -106,7 +94,6 @@ Definition subterm_for_ind
                     (map (lift0 1) (to_extended_list inds))) in
     let renamer name i := (name ++ "_subterm" ++ (string_of_nat i))%string in
     {| ind_name := (ind.(ind_name) ++ "_direct_subterm")%string;
-       (* type_for_direct_subterm npars *)
        ind_type  := it_mkProd_or_LetIn
                       pars
                    (it_mkProd_or_LetIn
