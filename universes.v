@@ -4,6 +4,9 @@ Require Import MetaCoq.Template.Universes.
 From MetaCoq.PCUIC Require Import PCUICAst PCUICValidity PCUICGeneration
      PCUICTyping PCUICWeakeningEnv PCUICWeakening.
 
+From MetaCoq.PCUIC Require Import PCUICSigmaCalculus.
+Set Printing All.
+
 Definition universes_decl_extends (u v: universes_decl) : Type :=
   match (u,v) with
   | (Monomorphic_ctx u', Monomorphic_ctx v') => LevelSet.Subset (fst u') (fst v') * ConstraintSet.Subset (snd u') (snd v')
@@ -95,7 +98,7 @@ Qed.
 
 Lemma weakening_env_univ `{checker_flags}:
   env_prop (fun Σ Γ t T =>
-              forall u, (*satisfiable_udecl Σ.1 (Monomorphic_ctx u) ->*) universes_decl_extends Σ.2 (Monomorphic_ctx u) -> (Σ.1, (Monomorphic_ctx u)) ;;; Γ |- t : T).
+              forall u, universes_decl_extends Σ.2 (Monomorphic_ctx u) -> (Σ.1, (Monomorphic_ctx u)) ;;; Γ |- t : T).
 Proof.
   apply typing_ind_env; intros; rename_all_hyps.
     all: (destruct (Σ.2) eqn: Σ_eq; revgoals; first exfalso; auto;
@@ -183,7 +186,9 @@ Proof.
         1-4:cbn in desteq; try destruct p; inversion desteq;
             unfold snoc, app_context in H2; symmetry in H2;
             contradict H2; apply List.app_cons_not_nil. } clear desteq.
-      subst. destruct s. admit.
+      subst.
+      eexists. split; revgoals.
+      eexists.
     + admit. (*eexists. split; revgoals. eexists.*)
     + admit.
 Admitted.

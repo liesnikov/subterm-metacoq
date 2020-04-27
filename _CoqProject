@@ -4,6 +4,8 @@
 -Q ../metacoq/checker/theories MetaCoq.Checker
 -R . Local
 
+non_uniform.v
+sigma.v
 subterm.v
 test.v
 proof.v
